@@ -30,17 +30,290 @@ quark Bond
     return false;
   }
 
+  Void clearRemainingBonds(Unsigned startIndex)
+  {
+    if(startIndex < (Unsigned) 4)
+    {
+      for(Unsigned i= startIndex; i < (Unsigned)4; i++)
+      {
+        xBonds[i] = 0;
+        yBonds[i] = 0;
+      }
+    }
+  }
+
   ARGB getColor(Unsigned selector)
   {
     ColorUtils cu;
     if (myState == 0 && bonded) return cu.color(0x9,0xff,0x9);
     else if(myState == 1) return cu.color(0x0, 0x0, 0xff);
+    else if(myState == 2) return cu.color(0xff, 0x0, 0x0);
+    else if(myState == 3) return cu.color(0x0, 0xff, 0xff);
+    else if(myState == 4) return cu.color(0xff, 0x0, 0xff);
     else return cu.color(0xff,0x0,0xff);
   }
 
 }
 
 
+element Electron
+{
+  Unsigned(12) moleculeNum1;
+  Unsigned(12) moleculeNum2;
+  Unsigned(12) polymerNum = 0;
+  Unsigned(12) polymerCount = 0;
+  Unsigned(3) moveDir = 0;
+  Bool waitingToMove = false;
+  Bool foundOtherElectron = false;
+  Bool alreadyAdded = false;
+  Bool movedMol1 = false;
+  Bool movedMol2 = false;
+
+  Void behave()
+  {
+     EventWindow ew;
+     //moveMolecule(ew);
+     broadcastPolymerCount(ew);
+  }
+
+  Void setPolymerNum()
+  {
+    Random rand;
+    if(polymerNum == 0)
+    {
+      polymerNum = (Unsigned(12))rand.between(1, 4000);
+    }
+  }
+
+  Void broadcastPolymerCount(EventWindow ew)
+  {
+    for(Unsigned(6) i =0; i<41; i++)
+    {
+      if(ew[i] is Electron)
+      {
+        Electron e = (Electron) ew[i];
+        if(e.polymerNum == polymerNum)
+        {
+          if(e.polymerCount < polymerCount)
+          {
+            if(e.polymerCount == 4 || e.polymerCount == 5)
+            {
+              polymerCount += e.polymerCount;
+            }
+
+            e.polymerCount = polymerCount;
+            ew[i] = e;
+          }
+        }
+      }
+    }
+  }
+
+  Void setInitialPolymerCount(Unsigned(12) count)
+  {
+    polymerCount = count;
+  }
+  Void moveMolecule(EventWindow ew)
+  {
+    Random rand;
+    Int(5) xMove = -2;
+    Int(5) yMove = -2;
+    if(moveDir == 0)
+    {
+       moveDir = (Unsigned(3)) rand.between(1,4);
+    }
+
+    if(moveDir == 1)
+    {
+      xMove =-1;
+      yMove = 0;
+    }
+    else if(moveDir == 2)
+    {
+      xMove =0;
+      yMove = -1;
+    }
+    else if(moveDir == 3)
+    {
+      xMove =0;
+      yMove = 1;
+    }
+    else if(moveDir == 4)
+    {
+      xMove = 1;
+      yMove =0;
+    }
+    else
+    {
+      return;
+    }
+
+    if(!waitingToMove)
+    {
+      Unsigned(6) neighbors [41];
+
+      for(Unsigned(6) k=0; k<41; k++)
+      {
+        neighbors[k] = 60;
+      }
+      Unsigned(6) moleculeIndex =0;
+      for(Unsigned(6) i=0; i<41; i++)
+      {
+        if(ew[i] is Proton)
+        {
+          Proton o = (Proton) ew[i];
+          if(moleculeNum1 == o.moleculeNum || moleculeNum2 == o.moleculeNum)
+          {
+            neighbors[moleculeIndex] = i;
+            C2D coord = ew.getCoord(i);
+            coord.x += xMove;
+            coord.y += yMove;
+            Unsigned(6) siteNum = ew.getSiteNumber(coord);
+            if(ew[siteNum] is Proton)
+            {
+              Proton pCheck = (Proton) ew[siteNum];
+              if((pCheck.myState > 0) && (pCheck.moleculeNum != moleculeNum1) && (pCheck.moleculeNum != moleculeNum2))
+              {
+                return;
+              }
+            }
+            if(!(ew.isLegal(coord)) || !(ew.isLive(coord)))
+            {
+              return;
+            }
+            moleculeIndex++;
+          }
+        }
+        else if(ew[i] is Electron)
+        {
+          Electron e = (Electron) ew[i];
+          if(i != 0)
+          {
+            if(e.polymerNum == polymerNum)
+            {
+              e.moveDir = moveDir;
+              e.waitingToMove = false;
+              waitingToMove = true;
+              ew[i] = e;
+            }
+          }
+          else
+          {
+            neighbors[moleculeIndex] = i;
+            C2D coord = ew.getCoord(i);
+            coord.x += xMove;
+            coord.y += yMove;
+            Unsigned(6) siteNum = ew.getSiteNumber(coord);
+            if(ew[siteNum] is Proton)
+            {
+              Proton pCheck = (Proton) ew[siteNum];
+              if((pCheck.myState > 0) && (pCheck.moleculeNum != moleculeNum1) && (pCheck.moleculeNum != moleculeNum2))
+              {
+                return;
+              }
+            }
+            if(!(ew.isLegal(coord)) || !(ew.isLive(coord)))
+            {
+              return;
+            }
+            moleculeIndex++;
+          }
+        }
+      }
+      if(moveDir == 4)
+      {
+        Int(16) xCoords = 3;
+        while(xCoords > -5)
+        {
+          for(Unsigned(6) i =0; i<41; i++)
+          {
+            Unsigned(6) sn = neighbors[i];
+            if(sn != 60)
+            {
+              C2D coord = ew.getCoord(sn);
+              if(coord.x == xCoords)
+              {
+                coord.x += 1;
+                Unsigned(6) snMove = ew.getSiteNumber(coord);
+                ew.swap(sn, snMove);
+              }
+            }
+          }
+          xCoords--;
+        }
+      }
+      else if(moveDir == 3)
+      {
+        Int(16) yCoords = 3;
+        while(yCoords > -5)
+        {
+          for(Unsigned(6) i =0; i<41; i++)
+          {
+            Unsigned(6) sn = neighbors[i];
+            if(sn != 60)
+            {
+              C2D coord = ew.getCoord(sn);
+              if(coord.y == yCoords)
+              {
+                coord.y += 1;
+                Unsigned(6) snMove = ew.getSiteNumber(coord);
+                ew.swap(sn, snMove);
+              }
+            }
+          }
+          yCoords--;
+        }
+      }
+      else if(moveDir == 2)
+      {
+        Int(16) yCoords = -3;
+        while(yCoords < 5)
+        {
+          for(Unsigned(6) i =0; i<41; i++)
+          {
+            Unsigned(6) sn = neighbors[i];
+            if(sn != 60)
+            {
+              C2D coord = ew.getCoord(sn);
+              if(coord.y == yCoords)
+              {
+                coord.y -= 1;
+                Unsigned(6) snMove = ew.getSiteNumber(coord);
+                ew.swap(sn, snMove);
+              }
+            }
+          }
+          yCoords++;
+        }
+      }
+      else if(moveDir == 1)
+      {
+        Int(16) xCoords = -3;
+        while(xCoords < 5)
+        {
+          for(Unsigned(6) i =0; i<41; i++)
+          {
+            Unsigned(6) sn = neighbors[i];
+            if(sn != 60)
+            {
+              C2D coord = ew.getCoord(sn);
+              if(coord.x == xCoords)
+              {
+                coord.x -= 1;
+                Unsigned(6) snMove = ew.getSiteNumber(coord);
+                ew.swap(sn, snMove);
+              }
+            }
+          }
+          xCoords++;
+        }
+      }
+    }
+
+
+  }
+
+}
 
 element Proton : Bond
 {
@@ -49,13 +322,9 @@ element Proton : Bond
   Unsigned(6) moleculeCount=0;
 
   Unsigned(3) moleculeDir = 5;
-  Bool set = false;
-  Bool tryingToMoveMol = false;
-
-
-
-
-
+  Bool partOfChain = false;
+  Unsigned(12) polymerNum = 0;
+  Unsigned(6) polymerCount = 0;
 
   Void behave()
   {
@@ -64,27 +333,101 @@ element Proton : Bond
     Bool bondedThisStep = false;
     getMoleculeNumber(rand);
     getMoleculeCount(ew, rand);
-    if(bonded)
+    if(myState == 0)
+    {
+      if(bonded)
+      {
+        checkBonds(ew);
+      }
+      setBonds(ew);
+      getMoleculeCount(ew, rand);
+      if(!bonded)
+      {
+        Unsigned(6) move = (Unsigned(6))rand.between(1,4);
+        Unsigned(6) randMove = (Unsigned(6))rand.between(1,40);
+        if(ew[move] is Empty)
+        {
+
+          Int replicate = rand.between(0, 100);
+          if(replicate < 5)
+          {
+            if(ew[randMove] is Empty)
+            {
+              Proton p;
+              ew[randMove] = p;
+            }
+
+          }
+          else
+          {
+            ew.swap(0,move);
+          }
+        }
+      }
+      else
+      {
+        isCarbon(ew);
+        isOxygen(ew);
+        //isNitrogen(ew);
+        //isHydrogen(ew);
+        moveMolecule(ew, rand);
+      }
+    }
+    else if(myState == 1)
     {
       checkBonds(ew);
-    }
-    setBonds(ew);
-    getMoleculeCount(ew, rand);
-    if(!bonded)
-    {
-      Unsigned(6) move = (Unsigned(6))rand.between(1,4);
-      if(ew[move] is Empty)
+      getPolymerCount(ew);
+      carbonMakePolymer(ew);
+      if(!partOfChain)
       {
-        ew.swap(0,move);
+        moveMolecule(ew, rand);
       }
-
     }
-    else
+    else if(myState == 2)
     {
-      isCarbon(ew);
-      moveMolecule(ew, rand);
+      checkBonds(ew);
+      getPolymerCount(ew);
+      makeOxygenPolymer(ew);
+      if(!partOfChain)
+      {
+        moveMolecule(ew, rand);
+      }
     }
+  }
 
+  Void getPolymerCount(EventWindow ew)
+  {
+    Unsigned(6) counter =0;
+    Unsigned(6) buffer[41];
+    Unsigned(6) moleculeIndex =0;
+    for(Unsigned(6) i =0; i<41; i++)
+    {
+      buffer[i] = 60;
+    }
+    for(Unsigned(6) j =0; j<41; j++)
+    {
+      if(ew[j] is Proton)
+      {
+        Proton p = (Proton) ew[j];
+        if(p.polymerNum == polymerNum)
+        {
+          buffer[moleculeIndex] = j;
+          counter++;
+        }
+      }
+    }
+    for(Unsigned(6) k=0; k<41; k++)
+    {
+      if(buffer[k] != 60)
+      {
+        if(ew[buffer[k]] is Proton)
+        {
+          Proton countProton = (Proton) ew[buffer[k]];
+          countProton.polymerCount = counter;
+          ew[buffer[k]] = countProton;
+        }
+      }
+    }
   }
 
   Void getMoleculeCount(EventWindow ew, Random rand)
@@ -235,6 +578,10 @@ element Proton : Bond
               return;
             }
           }
+          else if(ew[siteNum] is Electron)
+          {
+            return;
+          }
           if(!(ew.isLegal(coord)) || !(ew.isLive(coord)))
           {
             return;
@@ -242,6 +589,7 @@ element Proton : Bond
           moleculeIndex++;
         }
       }
+
     }
     if(moveDir == 4)
     {
@@ -334,8 +682,328 @@ element Proton : Bond
 
   }
 
+  Void carbonMakePolymer(EventWindow ew)
+  {
+    Unsigned(6) checkSN;
+    Unsigned(6) emptySN;
+    Unsigned(3) oppositeDir;
+    if(myState == 1)
+    {
+      if(moleculeDir == 1)
+      {
+        checkSN = (Unsigned(6)) 9;
+        emptySN = (Unsigned(6)) 1;
+        oppositeDir = (Unsigned(3)) 4;
+      }
+      else if(moleculeDir == 2)
+      {
+        checkSN = (Unsigned(6)) 10;
+        emptySN = (Unsigned(6)) 2;
+        oppositeDir = (Unsigned(3)) 3;
+      }
+      else if(moleculeDir == 3)
+      {
+        checkSN = (Unsigned(6)) 11;
+        emptySN = (Unsigned(6)) 3;
+        oppositeDir = (Unsigned(3)) 2;
+      }
+      else if(moleculeDir == 4)
+      {
+        checkSN = (Unsigned(6)) 12;
+        emptySN = (Unsigned(6)) 4;
+        oppositeDir = (Unsigned(3)) 1;
+      }
+      else
+      {
+        return;
+      }
 
+      if(ew[emptySN] is Empty)
+      {
+        if(ew[checkSN] is Proton)
+        {
+          Proton p = (Proton) ew[checkSN];
+          if((p.myState == 1 && p.moleculeDir == oppositeDir) || p.myState == 2)
+          {
+            Electron e;
+            Unsigned(6) pMolCount;
+            Unsigned(6) myMolCount;
+            if(p.polymerNum == 0 && polymerNum == 0)
+            {
+              e.setPolymerNum();
 
+              if(myState == 1)
+              {
+                myMolCount = 5;
+              }
+              else if(myState == 2)
+              {
+                myMolCount = 4;
+              }
+              if(p.myState == 1)
+              {
+                pMolCount = 5;
+              }
+              else if(p.myState == 2)
+              {
+                pMolCount = 4;
+              }
+              polymerNum = e.polymerNum;
+              p.polymerNum = e.polymerNum;
+              e.polymerCount = myMolCount + pMolCount;
+            }
+            else if(polymerNum != 0 && p.polymerNum == 0)
+            {
+              e.polymerNum = polymerNum;
+              p.polymerNum = polymerNum;
+              if(p.myState == 1)
+              {
+                pMolCount = 5;
+              }
+              else if(p.myState == 2)
+              {
+                pMolCount = 4;
+              }
+              e.polymerCount = pMolCount;
+            }
+            else if(polymerNum == 0 && p.polymerNum != 0)
+            {
+              e.polymerNum = p.polymerNum;
+              polymerNum = p.polymerNum;
+              if(myState == 1)
+              {
+                pMolCount = 5;
+              }
+              else if(myState == 2)
+              {
+                pMolCount = 4;
+              }
+              e.polymerCount = pMolCount;
+            }
+            else
+            {
+              if(polymerCount >= p.polymerCount)
+              {
+                e.polymerNum = polymerNum;
+                p.polymerNum = polymerNum;
+              }
+              else
+              {
+                e.polymerNum = p.polymerNum;
+                polymerNum = p.polymerNum;
+              }
+              e.polymerCount = polymerCount+p.polymerCount;
+
+            }
+            updatePolymerNum(ew);
+            p.updatePolymerNum(ew);
+            p.partOfChain = true;
+            partOfChain = true;
+            p.setPartOfChain(ew);
+            setPartOfChain(ew);
+            e.moleculeNum1 = moleculeNum;
+            e.moleculeNum2 = p.moleculeNum;
+            ew[checkSN] = p;
+            ew[emptySN] = e;
+          }
+        }
+      }
+    }
+  }
+
+  Void makeOxygenPolymer(EventWindow ew)
+  {
+    Unsigned(6) yCheckSN;
+    Unsigned(6) xCheckSN;
+    Unsigned(6) yEmptySN;
+    Unsigned(6) xEmptySN;
+    Unsigned(6) useCheck=0;
+    Unsigned(6) useEmpty=0;
+    Unsigned(3) oppositeDir;
+
+    if(moleculeDir == 1)
+    {
+      yEmptySN = 2;
+      xEmptySN = 1;
+      yCheckSN = 10;
+      xCheckSN = 9;
+    }
+    else if(moleculeDir == 2)
+    {
+      yEmptySN = 2;
+      xEmptySN = 4;
+      yCheckSN = 10;
+      xCheckSN = 12;
+    }
+    else if(moleculeDir == 3)
+    {
+      yEmptySN = 3;
+      xEmptySN = 1;
+      yCheckSN = 11;
+      xCheckSN = 9;
+    }
+    else if(moleculeDir == 4)
+    {
+      yEmptySN = 3;
+      xEmptySN = 4;
+      yCheckSN = 11;
+      xCheckSN = 12;
+    }
+    else
+    {
+      return;
+    }
+    if(ew[xEmptySN] is Empty)
+    {
+      useEmpty = xEmptySN;
+      useCheck = xCheckSN;
+
+    }
+    else if(ew[yEmptySN] is Empty)
+    {
+      useEmpty = yEmptySN;
+      useCheck = yCheckSN;
+    }
+    C2D coord = ew.getCoord(useEmpty);
+    C2D coordChecker = ew.getCoord(useEmpty);
+    coordChecker.x+=1;
+    Unsigned(6) xPlus = ew.getSiteNumber(coordChecker);
+    if(ew[xPlus] is Electron) return;
+    coordChecker.x = coord.x;
+    coordChecker.x+=(-1);
+    Unsigned(6) xMinus = ew.getSiteNumber(coordChecker);
+    if(ew[xMinus] is Electron) return;
+    coordChecker.x = coord.x;
+    coordChecker.y+=1;
+    Unsigned(6) yPlus = ew.getSiteNumber(coordChecker);
+    if(ew[yPlus] is Electron) return;
+    coordChecker.y = coord.y;
+    coordChecker.y+=(-1);
+    Unsigned(6) yMinus = ew.getSiteNumber(coordChecker);
+    if(ew[yMinus] is Electron) return;
+    if(useEmpty != 0)
+    {
+      if(ew[useCheck] is Proton)
+      {
+        Proton p = (Proton) ew[useCheck];
+        if(p.myState == 1 || p.myState == 2)
+        {
+          Electron e;
+          Unsigned(6) pMolCount;
+          Unsigned(6) myMolCount;
+          if(p.polymerNum == 0 && polymerNum == 0)
+          {
+            e.setPolymerNum();
+            polymerNum = e.polymerNum;
+            p.polymerNum = e.polymerNum;
+
+            if(myState == 1)
+            {
+              myMolCount = 5;
+            }
+            else if(myState == 2)
+            {
+              myMolCount = 4;
+            }
+            if(p.myState == 1)
+            {
+              pMolCount = 5;
+            }
+            else if(p.myState == 2)
+            {
+              pMolCount = 4;
+            }
+            e.polymerCount = myMolCount + pMolCount;
+          }
+          else if(polymerNum != 0 && p.polymerNum == 0)
+          {
+            e.polymerNum = polymerNum;
+            p.polymerNum = polymerNum;
+            if(p.myState == 1)
+            {
+              pMolCount = 5;
+            }
+            else if(p.myState == 2)
+            {
+              pMolCount = 4;
+            }
+            e.polymerCount = pMolCount;
+
+          }
+          else if(polymerNum == 0 && p.polymerNum != 0)
+          {
+            e.polymerNum = p.polymerNum;
+            polymerNum = p.polymerNum;
+            if(myState == 1)
+            {
+              pMolCount = 5;
+            }
+            else if(myState == 2)
+            {
+              pMolCount = 4;
+            }
+            e.polymerCount = pMolCount;
+          }
+          else
+          {
+            if(polymerCount >= p.polymerCount)
+            {
+              e.polymerNum = polymerNum;
+              p.polymerNum = polymerNum;
+            }
+            else
+            {
+              e.polymerNum = p.polymerNum;
+              polymerNum = p.polymerNum;
+            }
+            e.polymerCount = polymerCount+p.polymerCount;
+          }
+          updatePolymerNum(ew);
+          p.updatePolymerNum(ew);
+          p.partOfChain = true;
+          partOfChain = true;
+          p.setPartOfChain(ew);
+          setPartOfChain(ew);
+          e.moleculeNum1 = moleculeNum;
+          e.moleculeNum2 = p.moleculeNum;
+          ew[useCheck] = p;
+          ew[useEmpty] = e;
+        }
+      }
+    }
+  }
+
+  Void setPartOfChain(EventWindow ew)
+  {
+    for(Unsigned(6) i =0; i<41; i++)
+    {
+      if(ew[i] is Proton)
+      {
+        Proton p = (Proton) ew[i];
+        if(p.moleculeNum == moleculeNum)
+        {
+          p.partOfChain = true;
+          ew[i] = p;
+        }
+      }
+    }
+  }
+
+  Void updatePolymerNum(EventWindow ew)
+  {
+    for(Unsigned(6) i=0; i<41; i++)
+    {
+      if(ew[i] is Proton)
+      {
+        Proton p = (Proton) ew[i];
+        if(p.moleculeNum == moleculeNum)
+        {
+          p.polymerNum = polymerNum;
+          ew[i] = p;
+        }
+      }
+    }
+  }
 
   Void checkBonds(EventWindow ew)
   {
@@ -469,6 +1137,339 @@ element Proton : Bond
     }
   }
 
+  Void isOxygen(EventWindow ew)
+  {
+    Random r;
+
+    for(Unsigned(6) i= 0; i<41; i++)
+    {
+      if(ew[i] is Proton)
+      {
+        Proton p = (Proton) ew[i];
+        if(p.moleculeNum == moleculeNum)
+        {
+           Bool check = isTopLeft(ew, i, moleculeNum);
+        }
+      }
+    }
+  }
+
+  Bool isTopLeft(EventWindow ew, Unsigned(6) sn, Unsigned(12) moleNum )
+  {
+    Random r;
+    Bool retVal = false;
+    Unsigned(6) xSN = 60;
+    Unsigned(6) ySN = 60;
+    Unsigned(6) diagSN = 60;
+    Bool xBool = false;
+    Bool yBool = false;
+    Bool diagBool = false;
+
+    C2D coordOG = ew.getCoord(sn);
+    C2D coordChecker = ew.getCoord(sn);
+
+    coordChecker.x = (Int(16))(coordOG.x + 1);
+    Unsigned(6) right = ew.getSiteNumber(coordChecker);
+    if(ew.isLegal(right))
+    {
+      if(ew[right] is Proton)
+      {
+        Proton rightProton = (Proton) ew[right];
+        if(rightProton.moleculeNum == moleNum)
+        {
+          xBool = true;
+          xSN = right;
+        }
+      }
+    }
+    coordChecker.x = coordOG.x;
+    coordChecker.y = (Int(16)) (coordOG.y + 1);
+    Unsigned(6) down = ew.getSiteNumber(coordChecker);
+    if(ew.isLegal(down))
+    {
+      if(ew[down] is Proton)
+      {
+        Proton downProton = (Proton) ew[down];
+        if(downProton.moleculeNum == moleNum)
+        {
+          yBool = true;
+          ySN = down;
+        }
+      }
+    }
+    coordChecker.x = (Int(16))(coordOG.x + 1);
+    Unsigned(6) diag = ew.getSiteNumber(coordChecker);
+    if(ew.isLegal(diag))
+    {
+      if(ew[diag] is Proton)
+      {
+        Proton diagProton = (Proton) ew[diag];
+        if(diagProton.moleculeNum == moleNum)
+        {
+          diagBool = true;
+          diagSN = diag;
+        }
+      }
+    }
+    if(xBool && yBool && diagBool)
+    {
+      Unsigned(12) newMolNum;
+      if(ew[sn] is Proton)
+      {
+        Proton p = (Proton) ew[sn];
+        p.moleculeNum = 0;
+        p.getMoleculeNumber(r);
+        newMolNum = p.moleculeNum;
+        p.moleculeCount = 4;
+        p.myState = 2;
+        p.moleculeDir = 1;
+        p.setOxygenBonds(p.moleculeDir);
+        ew[sn] = p;
+      }
+      if(ew[xSN] is Proton)
+      {
+        Proton rightProton = (Proton) ew[xSN];
+        rightProton.moleculeNum = newMolNum;
+        rightProton.moleculeCount = 4;
+        rightProton.myState = 2;
+        rightProton.moleculeDir = 2;
+        rightProton.setOxygenBonds(rightProton.moleculeDir);
+        ew[xSN] = rightProton;
+      }
+
+      if(ew[ySN] is Proton)
+      {
+        Proton downProton = (Proton) ew[ySN];
+        downProton.moleculeNum = newMolNum;
+        downProton.moleculeCount = 4;
+        downProton.myState = 2;
+        downProton.moleculeDir = 3;
+        downProton.setOxygenBonds(downProton.moleculeDir);
+        ew[ySN] = downProton;
+      }
+
+      if(ew[diagSN] is Proton)
+      {
+        Proton diagProton = (Proton) ew[diagSN];
+        diagProton.moleculeNum = newMolNum;
+        diagProton.moleculeCount = 4;
+        diagProton.myState = 2;
+        diagProton.moleculeDir = 4;
+        diagProton.setOxygenBonds(diagProton.moleculeDir);
+        ew[diagSN] = diagProton;
+      }
+
+
+      retVal = true;
+
+    }
+    return retVal;
+  }
+
+  Void isNitrogen(EventWindow ew)
+  {
+    for(Unsigned(6) i =0; i<41; i++)
+    {
+      if(ew[i] is Proton)
+      {
+        Proton p = (Proton) ew[i];
+        if(p.moleculeNum == moleculeNum)
+        {
+          Bool threeStraight = hasThreeStraight(ew, i, p.moleculeNum);
+          if(threeStraight)
+          {
+            Unsigned(6) corner = getCornerOfL(ew, i, p.moleculeNum);
+            if(corner != 60)
+            {
+              C2D coordCorner = ew.getCoord(corner);
+              C2D coordCurrent = ew.getCoord(i);
+              Int yDiff = coordCorner.y - coordCurrent.y;
+              Unsigned(12) newMolNum = setStraightBonds(ew, i);
+              if(newMolNum != 0)
+              {
+                setCornerBonds(ew, corner, yDiff, newMolNum);
+              }
+
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Bool hasThreeStraight(EventWindow ew, Unsigned(6) sn, Unsigned(12) moleNum)
+  {
+    Bool retVal = false;
+    Proton beginProton;
+    Proton midProton;
+    Proton endProton;
+    Unsigned(6) midSN;
+    Unsigned(6) endSN;
+    if(ew[sn] is Proton)
+    {
+      beginProton = (Proton) ew[sn];
+      C2D coord = ew.getCoord(sn);
+      coord.x += 1;
+      if(ew.isLive(coord))
+      {
+        midSN = ew.getSiteNumber(coord);
+        if(ew[midSN] is Proton)
+        {
+          midProton = (Proton) ew[midSN];
+          if(midProton.moleculeNum == moleNum)
+          {
+            coord.x += 1;
+            if(ew.isLive(coord))
+            {
+              endSN = ew.getSiteNumber(coord);
+              if(ew[endSN] is Proton)
+              {
+                endProton = (Proton) ew[endSN];
+                if(endProton.moleculeNum == moleculeNum)
+                {
+                  return true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  Unsigned(6) getCornerOfL(EventWindow ew, Unsigned(6) sn, Unsigned(12) moleNum)
+  {
+    Random rand;
+    C2D coordOG = ew.getCoord(sn);
+    C2D coordChecker = ew.getCoord(sn);
+    Unsigned(6) corner = 60;
+    for(Unsigned(3) i = 0; i<4; i++)
+    {
+      if(i==0)
+      {
+        coordChecker.y-=1;
+      }
+      else if(i ==1)
+      {
+        coordChecker.y-=1;
+        coordChecker.x+=2;
+      }
+      else if(i == 2)
+      {
+        coordChecker.y+=1;
+      }
+      else
+      {
+        coordChecker.y+=1;
+        coordChecker.x+=2;
+      }
+
+      if(ew.isLive(coordChecker) && ew.isLegal(coordChecker))
+      {
+        Unsigned(6) check = ew.getSiteNumber(coordChecker);
+        if(ew[check] is Proton)
+        {
+          Proton p = (Proton) ew[sn];
+          if(p.moleculeNum == moleNum)
+          {
+            corner = sn;
+            return corner;
+          }
+        }
+      }
+      coordChecker.x = coordOG.x;
+      coordChecker.y = coordOG.y;
+    }
+    return corner;
+  }
+
+  Unsigned(12) setStraightBonds(EventWindow ew, Unsigned(6) startSN)
+  {
+    Random rand;
+    Unsigned(12) newMolNum =0;
+    if(ew[startSN] is Proton)
+    {
+      Proton startProton = (Proton) ew[startSN];
+      startProton.moleculeNum = 0;
+      startProton.getMoleculeNumber(rand);
+      newMolNum = startProton.moleculeNum;
+      startProton.moleculeCount = 4;
+      startProton.myState = 3;
+      startProton.moleculeDir = 1;
+      startProton.xBonds[0] = 1;
+      startProton.yBonds[0] = 0;
+
+      startProton.clearRemainingBonds(1);
+      ew[startSN] = startProton;
+
+      C2D checker = ew.getCoord(startSN);
+      checker.x+=1;
+      Unsigned(6) midSN = ew.getSiteNumber(checker);
+      if(ew[midSN] is Proton)
+      {
+        Proton midProton = (Proton) ew[midSN];
+        midProton.moleculeNum = newMolNum;
+        midProton.moleculeCount = 4;
+        midProton.myState = 3;
+        midProton.moleculeDir = 2;
+        midProton.xBonds[0] = -1;
+        midProton.yBonds[0] = 0;
+        midProton.xBonds[1] = 1;
+        midProton.yBonds[1] = 0;
+        midProton.clearRemainingBonds(2);
+        ew[midSN] = midProton;
+
+      }
+      C2D endChecker = ew.getCoord(midSN);
+      endChecker.x+=1;
+      Unsigned(6) endSN = ew.getSiteNumber(endChecker);
+      if(ew[endSN] is Proton)
+      {
+        Proton endProton = (Proton) ew[endSN];
+        endProton.moleculeNum = newMolNum;
+        endProton.moleculeCount = 4;
+        endProton.myState = 3;
+        endProton.moleculeDir = 3;
+        endProton.xBonds[0] = -1;
+        endProton.yBonds[0] = 0;
+        endProton.clearRemainingBonds(1);
+        ew[endSN] = endProton;
+      }
+
+    }
+    return newMolNum;
+  }
+
+  Void setCornerBonds(EventWindow ew, Unsigned(6) sn, Int y, Unsigned(12) newMolNum)
+  {
+    if(ew[sn] is Proton)
+    {
+      Proton cornerProton = (Proton) ew[sn];
+      cornerProton.moleculeNum = newMolNum;
+      cornerProton.moleculeCount = 4;
+      cornerProton.myState = 3;
+      cornerProton.moleculeDir = 4;
+      cornerProton.xBonds[0] =(Direction) 0;
+      cornerProton.yBonds[0] = (Direction) ((-1)*y);
+      cornerProton.clearRemainingBonds(1);
+      ew[sn] = cornerProton;
+
+      C2D coordCorner = ew.getCoord(sn);
+      coordCorner.y+=(Int(16)) ((-1)*y);
+      Unsigned(6) bondSN = ew.getSiteNumber(coordCorner);
+      if(ew[bondSN] is Proton)
+      {
+        Proton bondProton = (Proton) ew[bondSN];
+        bondProton.xBonds[1] = 0;
+        bondProton.yBonds[1] = (Direction)y;
+        ew[bondSN] = bondProton;
+
+      }
+
+    }
+  }
+
   Void setNonCenterCarbon(Direction x, Direction y)
   {
     Direction neg = -1;
@@ -478,6 +1479,143 @@ element Proton : Bond
     {
       xBonds[i] = 0;
       yBonds[i] = 0;
+    }
+  }
+
+  Void setOxygenBonds(Unsigned(3) loc)
+  {
+    if(loc == 1)
+    {
+      xBonds[0] = 1;
+      yBonds[0] = 0;
+
+      xBonds[1] = 0;
+      yBonds[1] = 1;
+    }
+    else if( loc == 2)
+    {
+      xBonds[0] = -1;
+      yBonds[0] = 0;
+
+      xBonds[1] = 0;
+      yBonds[1] = 1;
+    }
+    else if(loc == 3)
+    {
+      xBonds[0] = 1;
+      yBonds[0] = 0;
+
+      xBonds[1] = 0;
+      yBonds[1] = -1;
+    }
+    else if(loc == 4)
+    {
+      xBonds[0] = -1;
+      yBonds[0] = 0;
+
+      xBonds[1] = 0;
+      yBonds[1] = -1;
+    }
+
+    xBonds[2] = 0;
+    yBonds[2] = 0;
+
+    xBonds[3] = 0;
+    yBonds[3] = 0;
+  }
+
+  Void isHydrogen(EventWindow ew)
+  {
+    Random r;
+    Unsigned count = 0;
+    Bool check = false;
+    for(Unsigned(6) i =0; i<41; i++)
+    {
+      if(ew[i] is Proton)
+      {
+        Proton p = (Proton) ew[i];
+        if(p.moleculeNum == moleculeNum)
+        {
+          C2D coordChecker = ew.getCoord(i);
+          count++;
+          for(Unsigned(3) i= 0; i<3; i++)
+          {
+            coordChecker.x+=1;
+            if(ew.isLegal(coordChecker) && ew.isLive(coordChecker))
+            {
+              Unsigned(6) sn = ew.getSiteNumber(coordChecker);
+              if(ew[sn] is Proton)
+              {
+                Proton pCheck = (Proton) ew[sn];
+                if(!(pCheck.moleculeNum == p.moleculeNum))
+                {
+                  break;
+                }
+                else
+                {
+                  count++;
+                }
+              }
+            }
+          }
+          if(count == (Unsigned)4)
+          {
+            setFourInRow(ew, i, r);
+            return;
+          }
+        }
+      }
+      count = 0;
+    }
+  }
+
+  Void setFourInRow(EventWindow ew, Unsigned(6) sn, Random r)
+  {
+    Unsigned(12) newMolNum =0;
+    if(ew[sn] is Proton)
+    {
+      Proton startProton = (Proton) ew[sn];
+      startProton.moleculeNum = 0;
+      startProton.getMoleculeNumber(r);
+      newMolNum = startProton.moleculeNum;
+      startProton.moleculeCount = 4;
+      startProton.myState = 4;
+      startProton.moleculeDir = 1;
+      startProton.xBonds[0] = 1;
+      startProton.yBonds[0] = 0;
+      startProton.clearRemainingBonds(1);
+      ew[sn] = startProton;
+
+      C2D coordChecker = ew.getCoord(sn);
+      for(Unsigned(3) i = 0; i<3; i++)
+      {
+        coordChecker.x+=1;
+        Unsigned(6) nextSN = ew.getSiteNumber(coordChecker);
+        if(ew[nextSN] is Proton)
+        {
+          Proton nextProton = (Proton) ew[nextSN];
+          nextProton.moleculeNum = newMolNum;
+          nextProton.moleculeCount = 4;
+          nextProton.myState = 4;
+          if(i == 2)
+          {
+            nextProton.xBonds[0] = -1;
+            nextProton.yBonds[0] = 0;
+            nextProton.clearRemainingBonds(1);
+            nextProton.moleculeDir = 3;
+          }
+          else
+          {
+            nextProton.xBonds[0] = 1;
+            nextProton.yBonds[0] = 0;
+            nextProton.xBonds[1] = -1;
+            nextProton.yBonds[1] = 0;
+            nextProton.clearRemainingBonds(2);
+            nextProton.moleculeDir = 2;
+          }
+        }
+      }
+
     }
   }
 

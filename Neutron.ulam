@@ -15,6 +15,7 @@ element Neutron
   Unsigned(6) polymerCount = 0;
   Bool secondDir;
   Sn newNeutronLoc;
+  Sn resourceCount = 0;
 
   Bool enteredNewLoc = false;
 
@@ -25,11 +26,11 @@ element Neutron
     if(!initialized)
     {
       //assignRandomPolymerNum(rand);
-      //createRandomMolTypes(ew, rand);
-      //molTypes[0] = 1;
-      //molTypes[1] = 1;
-      //molDirs[0] = 0;
-      //molDirs[1] = 0;
+      createRandomMolTypes(ew, rand);
+      //molTypes[0] = 2;
+      //molTypes[1] = 2;
+      //molDirs[0] = 2;
+      //molDirs[1] = 1;
       initialized = true;
     }
     if(molDirsIndex == 1 || molTypesIndex == 1) alignFirst();
@@ -52,36 +53,12 @@ element Neutron
 
   Void createRandomMolTypes(EventWindow ew, Random rand)
   {
-
-    for(Sn i =0; i<4; i++)
+    for(Sn i= 0; i<4; i++)
     {
-      Sn randType = (Sn) rand.between(1, 36);
-      if(randType <= 6)
-      {
-        molTypes[i] = 1;
-      }
-      else if(randType > 6 && randType <= 12)
-      {
-        molTypes[i] = 2;
-      }
-      else if(randType > 12 && randType <= 18)
-      {
-        molTypes[i] = 3;
-      }
-      else if(randType > 18 && randType <= 24)
-      {
-        molTypes[i] = 4;
-      }
-      else if(randType > 24 && randType <= 30)
-      {
-        molTypes[i] = 5;
-      }
-      else
-      {
-        molTypes[i] = 6;
-      }
       molDirs[i]  = (Type) rand.between(0, 3);
     }
+
+
   }
 
   Void moveRandomly(EventWindow ew, Random rand)
@@ -97,23 +74,22 @@ element Neutron
   {
     Sn molCount = 0;
     Unsigned(12) molNum = 0;
-    for(Sn i=1; i<=4; i++)
+    for(Sn i=1; i<=8; i++)
     {
       if(ew[i] is Proton)
       {
         Proton p = (Proton) ew[i];
-        if(p.myState == 0)
+        if(p.polymerNum == 0)
         {
-          if(p.moleculeCount > 1)
-          {
-            molCount = p.moleculeCount;
+
+            //resourceCount += p.moleculeCount;
             molNum = p.moleculeNum;
             break;
-          }
+
         }
       }
     }
-    if(molCount != 0 && molNum != 0)
+    if(molNum != 0)
     {
       Sn molsToConsume[12];
       Sn count = 0;
@@ -124,7 +100,7 @@ element Neutron
           Proton resourceProton = (Proton) ew[i];
           if(resourceProton.moleculeNum == molNum)
           {
-            count++;
+            resourceCount++;
             ew[i] = Empty.instanceof;
           }
         }
@@ -139,7 +115,7 @@ element Neutron
       {
         protonsNeeded = 3;
       }
-      if(count >= protonsNeeded)
+      if(resourceCount >= protonsNeeded)
       {
         if(molToMake == 1)
         {
@@ -834,7 +810,7 @@ element Neutron
  Sn nextNeutronPos(EventWindow ew, Random rand)
   {
      enteredNewLoc = true;
-     Sn nextLoc = 60;
+     Sn nextLoc = 40;
      Sn nextPos;
      Type previous = (Type) (molTypesIndex -1);
      Type last = molTypes[previous];

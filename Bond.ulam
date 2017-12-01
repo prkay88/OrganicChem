@@ -62,7 +62,7 @@ element Electron
   typedef Unsigned(3) Type;
   typedef Unsigned(6) Sn;
   Type molTypes[4];
-  Type molDirs[4];
+  //Type molDirs[4];
   Unsigned(2) geneIndex = 0;
   Unsigned(2) geneNum;
   Unsigned(12) moleculeNum1;
@@ -70,15 +70,56 @@ element Electron
   Unsigned(12) polymerNum = 0;
   Unsigned(6) polymerCount = 0;
   Bool canReproduce = true;
+  Bool amDying = false;
   //Bool amLeader = false;
 
 
   Void behave()
   {
      EventWindow ew;
+     Random rand;
      //moveMolecule(ew);
      broadcastPolymerCount(ew);
+     updateMolTypes(ew);
      canReplicate(ew);
+     if(!canReproduce) moleculeDeath(ew, rand);
+  }
+
+  Void moleculeDeath(EventWindow ew, Random rand)
+  {
+    Int death = rand.between(0, 20000);
+    if(death < 10 || amDying)
+    {
+      for(Sn i=0; i<41; i++)
+      {
+        if(ew[i] is Proton)
+        {
+          Proton p = (Proton) ew[i];
+          if(p.moleculeNum == moleculeNum1 || p.moleculeNum == moleculeNum2)
+          {
+            Int spawn = rand.between(0, 20);
+            if(spawn <= 1)
+            {
+              ew[i] = Proton.instanceof;
+            }
+            else
+            {
+              ew[i] = Empty.instanceof;
+            }
+          }
+        }
+        else if(ew[i] is Electron)
+        {
+          Electron e = (Electron) ew[i];
+          if(e.polymerNum == polymerNum)
+          {
+            e.amDying = true;
+            ew[i] = e;
+          }
+        }
+      }
+      ew[0] = Proton.instanceof;
+    }
   }
 
   Void setPolymerNum()
@@ -87,6 +128,43 @@ element Electron
     if(polymerNum == 0)
     {
       polymerNum = (Unsigned(12))rand.between(1, 4000);
+    }
+  }
+
+  Void updateMolTypes(EventWindow ew)
+  {
+    for(Sn i=0; i<41; i++)
+    {
+      if(ew[i] is Electron)
+      {
+        Electron e = (Electron) ew[i];
+        if(e.polymerNum == polymerNum)
+        {
+          if(e.geneNum > geneNum)
+          {
+            for(Sn j=0; j<4; j++)
+            {
+              if(e.molTypes[j] > 0)
+              {
+                molTypes[j] = e.molTypes[j];
+              }
+            }
+            geneNum = e.geneNum;
+          }
+          else if(geneNum > e.geneNum)
+          {
+            for(Sn j=0; j<4; j++)
+            {
+              if(molTypes[j] > 0)
+              {
+                e.molTypes[j] = molTypes[j];
+              }
+            }
+            e.geneNum = geneNum;
+            ew[i] = e;
+          }
+        }
+      }
     }
   }
 
@@ -237,7 +315,7 @@ element Proton : Bond
         {
 
           Int replicate = rand.between(0, 100);
-          if(replicate < 8)
+          if(replicate < 5)
           {
             if(ew[randMove] is Empty)
             {
